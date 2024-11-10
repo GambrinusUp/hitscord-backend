@@ -7,6 +7,7 @@ const path = require("path");
 const cors = require("cors");
 const { Server } = require("socket.io");
 const mediasoup = require("mediasoup");
+const port = process.env.PORT || 3000;
 
 app.use(cors());
 
@@ -21,13 +22,13 @@ app.get("*", (req, res, next) => {
 
 app.use("/sfu/:room", express.static(path.join(process.cwd(), "public")));
 
-const options = {
+/*const options = {
   key: fs.readFileSync("server.key"),
   cert: fs.readFileSync("server.cert"),
-};
+};*/
 
-const httpServer = https.createServer(options, app);
-httpServer.listen(10000, "0.0.0.0", () => {
+const httpServer = https.createServer(app);
+httpServer.listen(port, "0.0.0.0", () => {
   console.log("Listening on port: 10000");
 });
 
@@ -469,7 +470,8 @@ const createWebRtcTransport = async (router) => {
         listenIps: [
           {
             ip: "0.0.0.0",
-            announcedIp: "127.0.0.1",
+            announcedIp: null,
+            //announcedIp: "127.0.0.1",
             //announcedIp: "192.168.0.100",
             //announcedIp: "10.115.190.28",
           },
