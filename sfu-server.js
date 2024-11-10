@@ -479,6 +479,7 @@ const createWebRtcTransport = async (router) => {
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,
+        stunServers: [{ urls: "stun:stun.l.google.com:19302" }],
       };
 
       let transport = await router.createWebRtcTransport(
