@@ -27,8 +27,8 @@ const options = {
 };
 
 const httpServer = https.createServer(options, app);
-httpServer.listen(3000, "0.0.0.0", () => {
-  console.log("Listening on port: 3000");
+httpServer.listen(10000, "0.0.0.0", () => {
+  console.log("Listening on port: 10000");
 });
 
 const io = new Server(httpServer, {
@@ -469,8 +469,8 @@ const createWebRtcTransport = async (router) => {
         listenIps: [
           {
             ip: "0.0.0.0",
-            //announcedIp: "127.0.0.1",
-            announcedIp: "192.168.0.100",
+            announcedIp: "127.0.0.1",
+            //announcedIp: "192.168.0.100",
             //announcedIp: "10.115.190.28",
           },
         ],
