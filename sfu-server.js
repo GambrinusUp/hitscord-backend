@@ -27,7 +27,7 @@ app.use("/sfu/:room", express.static(path.join(process.cwd(), "public")));
   cert: fs.readFileSync("server.cert"),
 };*/
 
-const httpServer = http.createServer(app);
+const httpServer = https.createServer(app);
 httpServer.listen(port, "0.0.0.0", () => {
   console.log("Listening on port: 10000");
 });
