@@ -22,14 +22,14 @@ app.get("*", (req, res, next) => {
 
 app.use("/sfu/:room", express.static(path.join(process.cwd(), "public")));
 
-/*const options = {
+const options = {
   key: fs.readFileSync("server.key"),
   cert: fs.readFileSync("server.cert"),
-};*/
+};
 
-const httpServer = https.createServer(app);
+const httpServer = https.createServer(options, app);
 httpServer.listen(port, "0.0.0.0", () => {
-  console.log("Listening on port: 10000");
+  console.log("Listening on port: 3000");
 });
 
 const io = new Server(httpServer, {
@@ -470,7 +470,7 @@ const createWebRtcTransport = async (router) => {
         listenIps: [
           {
             ip: "0.0.0.0",
-            announcedIp: "3.75.158.163",
+            announcedIp: "89.169.170.52",
             //announcedIp: "127.0.0.1",
             //announcedIp: "192.168.0.100",
             //announcedIp: "10.115.190.28",
