@@ -2,34 +2,26 @@ const https = require("https");
 const fs = require("fs");
 const express = require("express");
 const app = express();
-const http = require("http");
+//const http = require("http");
 const path = require("path");
 const cors = require("cors");
 const { Server } = require("socket.io");
 const mediasoup = require("mediasoup");
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 443;
 
 app.use(cors());
-
-app.get("*", (req, res, next) => {
-  const basePath = "/sfu/";
-  if (req.path.indexOf(basePath) === 0 && req.path.length > basePath.length)
-    return next();
-  res.send(
-    `You need to specify a room name in the path, e.g., 'http://127.0.0.1:3000/sfu/room'`
-  );
-});
+app.use(express.json());
 
 app.use("/sfu/:room", express.static(path.join(process.cwd(), "public")));
 
 const options = {
-  key: fs.readFileSync("server.key"),
-  cert: fs.readFileSync("server.cert"),
+  key: fs.readFileSync("privkey.pem"),
+  cert: fs.readFileSync("fullchain.pem"),
 };
 
 const httpServer = https.createServer(options, app);
-httpServer.listen(port, "51.250.111.226", () => {
-  console.log("Listening on port: 3000");
+httpServer.listen(port, "0.0.0.0", () => {
+  console.log("Listening on port: 443");
 });
 
 const io = new Server(httpServer, {
@@ -47,6 +39,49 @@ let peers = {}; // { socketId1: { roomName1, socket, transports = [id1, id2,] },
 let transports = []; // [ { socketId1, roomName1, transport, consumer }, ... ]
 let producers = []; // [ { socketId1, roomName1, producer, }, ... ]
 let consumers = []; // [ { socketId1, roomName1, consumer, }, ... ]
+
+app.post("/rooms/create", (req, res) => {
+  const { roomName, serverId } = req.body;
+
+  if (!roomName) {
+    return res.status(400).json({ error: "roomName is required" });
+  }
+
+  if (rooms[roomName]) {
+    return res.status(409).json({ message: "Room already exists" });
+  }
+
+  rooms[roomName] = {
+    serverId,
+    router: null,
+    peers: [],
+  };
+
+  res.status(201).json({
+    message: `Room '${roomName}' created successfully with serverId '${serverId}'`,
+  });
+});
+
+app.get("/rooms", (req, res) => {
+  const roomList = Object.entries(rooms).map(([roomName, room]) => ({
+    roomName,
+    ...room,
+  }));
+
+  res.json(roomList);
+});
+
+app.get("/rooms/:serverId", (req, res) => {
+  const { serverId } = req.params;
+  const filteredRooms = Object.entries(rooms)
+    .filter(([, room]) => room.serverId === serverId)
+    .map(([roomName, room]) => ({
+      roomName,
+      ...room,
+    }));
+
+  res.json(filteredRooms);
+});
 
 const createWorker = async () => {
   worker = await mediasoup.createWorker({
@@ -130,6 +165,7 @@ connections.on("connection", async (socket) => {
 
       rooms[roomName] = {
         router: rooms[roomName].router,
+        audioLevelObserver: rooms[roomName].audioLevelObserver,
         peers: rooms[roomName].peers.filter(
           (socketId) => socketId !== socket.id
         ),
@@ -161,6 +197,7 @@ connections.on("connection", async (socket) => {
 
       rooms[roomName] = {
         router: rooms[roomName].router,
+        audioLevelObserver: rooms[roomName].audioLevelObserver,
         peers: rooms[roomName].peers.filter(
           (socketId) => socketId !== socket.id
         ),
@@ -191,14 +228,54 @@ connections.on("connection", async (socket) => {
     callback({ rtpCapabilities });
   });
 
+  const notifyRoomPeers = (roomName, event, data) => {
+    const roomPeers = rooms[roomName]?.peers || [];
+
+    roomPeers.forEach((socketId) => {
+      const peer = peers[socketId];
+      if (peer?.socket) {
+        peer.socket.emit(event, data);
+      }
+    });
+  };
+
   const createRoom = async (roomName, socketId) => {
     let router1;
     let peers = [];
+
+    let audioLevelObserver;
+
     if (rooms[roomName]) {
       router1 = rooms[roomName].router;
       peers = rooms[roomName].peers || [];
+
+      audioLevelObserver = rooms[roomName].audioLevelObserver;
     } else {
       router1 = await worker.createRouter({ mediaCodecs });
+
+      audioLevelObserver = await router1.createAudioLevelObserver({
+        maxEntries: 99, // Максимум пользователей для отслеживания
+        threshold: -80, // Порог громкости в децибелах
+        interval: 400, // Интервал обновления данных в миллисекундах
+      });
+
+      // Обработчик событий для отслеживания громкости
+      audioLevelObserver.on("volumes", (volumes) => {
+        const activeSpeakers = volumes.map(({ producer, volume }) => ({
+          producerId: producer.id,
+          volume,
+        }));
+
+        // Отправляем информацию всем клиентам в комнате
+        //connections.emit("active-speakers", { activeSpeakers });
+        notifyRoomPeers(roomName, "active-speakers", { activeSpeakers });
+      });
+
+      audioLevelObserver.on("silence", () => {
+        // Уведомление о тишине
+        //connections.emit("active-speakers", { activeSpeakers: [] });
+        notifyRoomPeers(roomName, "active-speakers", { activeSpeakers: [] });
+      });
     }
 
     console.log(`Router ID: ${router1.id}`, peers.length);
@@ -206,6 +283,7 @@ connections.on("connection", async (socket) => {
     rooms[roomName] = {
       router: router1,
       peers: [...peers, socketId],
+      audioLevelObserver,
     };
 
     return router1;
@@ -256,6 +334,16 @@ connections.on("connection", async (socket) => {
       ...peers[socket.id],
       producers: [...peers[socket.id].producers, producer.id],
     };
+
+    // Подключаем аудио-продюсера к audioLevelObserver
+    const { audioLevelObserver } = rooms[roomName];
+    if (producer.kind === "audio") {
+      audioLevelObserver
+        .addProducer({ producerId: producer.id })
+        .catch((err) => {
+          console.error("Failed to add producer to audioLevelObserver:", err);
+        });
+    }
   };
 
   const addConsumer = (consumer, roomName) => {
@@ -296,12 +384,9 @@ connections.on("connection", async (socket) => {
         producerData.roomName === roomName &&
         !uniqueProducers.has(producerData.socketId) // Проверяем, был ли этот id уже отправлен
       ) {
-        uniqueProducers.forEach((uniquie) => {
-          console.log("check");
-          console.log(uniquie);
-        });
         uniqueProducers.add(producerData.socketId); // Добавляем id в Set
         const producerSocket = peers[producerData.socketId].socket;
+        //console.log("new-producer: ", producerSocket);
         producerSocket.emit("new-producer", { producerId: id });
       }
     });
@@ -369,8 +454,15 @@ connections.on("connection", async (socket) => {
     //console.log(producer);
     if (producer) {
       producer.producer.close();
+
       producers = producers.filter((p) => p.producer.id !== producerId);
       console.log(`Producer ${producerId} закрыт и удалён.`);
+
+      // Удаляем producer из audioLevelObserver
+      /*if (audioLevelObserver) {
+        audioLevelObserver.removeProducer({ producerId });
+        console.log(`Producer ${producerId} удалён из audioLevelObserver.`);
+      }*/
     }
 
     //
@@ -472,7 +564,7 @@ const createWebRtcTransport = async (router) => {
             ip: "0.0.0.0",
             announcedIp: "51.250.111.226",
             //announcedIp: "127.0.0.1",
-            //announcedIp: "192.168.0.100",
+            //announcedIp: "192.168.0.101",
             //announcedIp: "10.115.190.28",
           },
         ],
