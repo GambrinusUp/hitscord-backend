@@ -39,6 +39,8 @@ let peers = {}; // { socketId1: { roomName1, socket, transports = [id1, id2,] },
 let transports = []; // [ { socketId1, roomName1, transport, consumer }, ... ]
 let producers = []; // [ { socketId1, roomName1, producer, }, ... ]
 let consumers = []; // [ { socketId1, roomName1, consumer, }, ... ]
+let serversUser = {}; // { serverId1: { users: [ {socketId, userName, roomName}, ... ] }, ... }
+let servers = {}; // { serverId1: { roomNames: [ roomName1, roomName2, ...] }, ... }
 
 app.post("/rooms/create", (req, res) => {
   const { roomName, serverId } = req.body;
@@ -120,24 +122,74 @@ const mediaCodecs = [
 ];
 
 connections.on("connection", async (socket) => {
-  const notifyUsersList = () => {
-    let usersList = [];
-    usersList = producers.map(({ socketId, producer, userName }) => ({
-      socketId,
-      producerId: producer.id,
-      userName,
-    }));
+  const notifyUsersList = (serverId) => {
+    const server = servers[serverId];
+    const serverUsers = serversUser[serverId];
 
-    // Отправляем обновленный список пользователей всем в комнате
-    connections.emit("updateUsersList", { usersList });
+    if (!server || !serverUsers) return;
+
+    const roomUsersList = server.roomNames.map((roomName) => {
+      const users = producers
+        .filter(
+          ({ roomName: producerRoomName }) => producerRoomName === roomName
+        )
+        .map(({ socketId, userName, producer }) => ({
+          socketId,
+          userName,
+          producerId: producer.id,
+        }));
+
+      return {
+        roomName,
+        users,
+      };
+    });
+
+    serverUsers.users.forEach((user) => {
+      const targetSocket = connections.sockets.get(user.socketId);
+      if (targetSocket) {
+        targetSocket.emit("updateUsersList", { rooms: roomUsersList });
+      }
+    });
   };
 
   console.log(socket.id);
 
-  notifyUsersList();
+  //notifyUsersList();
 
   socket.emit("connection-success", {
     socketId: socket.id,
+  });
+
+  let currentServerId = null;
+
+  socket.on("setServer", ({ serverId, userName }) => {
+    for (const otherServerId in serversUser) {
+      if (serversUser.hasOwnProperty(otherServerId)) {
+        serversUser[otherServerId].users = serversUser[
+          otherServerId
+        ].users.filter((user) => user.socketId !== socket.id);
+        notifyUsersList(otherServerId);
+      }
+    }
+
+    if (!serversUser[serverId]) {
+      serversUser[serverId] = { users: [] };
+    }
+
+    const isUserAlreadyOnServer = serversUser[serverId].users.some(
+      (user) => user.socketId === socket.id
+    );
+
+    if (!isUserAlreadyOnServer) {
+      serversUser[serverId].users.push({
+        socketId: socket.id,
+        userName: userName,
+        roomName: null,
+      });
+    }
+
+    notifyUsersList(serverId);
   });
 
   const removeItems = (items, socketId, type) => {
@@ -172,7 +224,7 @@ connections.on("connection", async (socket) => {
       };
     }
 
-    notifyUsersList();
+    notifyUsersList(currentServerId);
   });
 
   socket.on("disconnect", () => {
@@ -204,12 +256,13 @@ connections.on("connection", async (socket) => {
       };
     }
 
-    notifyUsersList();
+    notifyUsersList(currentServerId);
   });
 
-  socket.on("joinRoom", async ({ roomName, userName }, callback) => {
+  socket.on("joinRoom", async ({ roomName, userName, serverId }, callback) => {
     console.log("joinRoom", userName);
-    const router1 = await createRoom(roomName, socket.id);
+    currentServerId = serverId;
+    const router1 = await createRoom(roomName, socket.id, serverId);
 
     peers[socket.id] = {
       socket,
@@ -239,7 +292,7 @@ connections.on("connection", async (socket) => {
     });
   };
 
-  const createRoom = async (roomName, socketId) => {
+  const createRoom = async (roomName, socketId, serverId) => {
     let router1;
     let peers = [];
 
@@ -276,6 +329,13 @@ connections.on("connection", async (socket) => {
         //connections.emit("active-speakers", { activeSpeakers: [] });
         notifyRoomPeers(roomName, "active-speakers", { activeSpeakers: [] });
       });
+
+      if (!servers[serverId]) {
+        servers[serverId] = { roomNames: [] };
+      }
+      if (!servers[serverId].roomNames.includes(roomName)) {
+        servers[serverId].roomNames.push(roomName);
+      }
     }
 
     console.log(`Router ID: ${router1.id}`, peers.length);
@@ -391,7 +451,7 @@ connections.on("connection", async (socket) => {
       }
     });
 
-    notifyUsersList();
+    notifyUsersList(currentServerId);
   };
 
   const getTransport = (socketId) => {
@@ -465,9 +525,9 @@ connections.on("connection", async (socket) => {
       }*/
     }
 
-    //
+    // Переделать
     socket.broadcast.emit("producerClosed", { producerId });
-    notifyUsersList();
+    notifyUsersList(currentServerId);
   });
 
   socket.on(
