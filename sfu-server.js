@@ -509,25 +509,34 @@ connections.on("connection", async (socket) => {
   );
 
   socket.on("stopProducer", ({ producerId }) => {
-    //console.log(`Producer ${producerId} `);
     const producer = producers.find((p) => p.producer.id === producerId);
-    //console.log(producer);
     if (producer) {
       producer.producer.close();
-
       producers = producers.filter((p) => p.producer.id !== producerId);
       console.log(`Producer ${producerId} закрыт и удалён.`);
 
-      // Удаляем producer из audioLevelObserver
-      /*if (audioLevelObserver) {
-        audioLevelObserver.removeProducer({ producerId });
-        console.log(`Producer ${producerId} удалён из audioLevelObserver.`);
-      }*/
+      //socket.broadcast.emit("producerClosed", { producerId });
+
+      producers
+        .filter((p) => p.roomName === producer.roomName)
+        .forEach((p) => {
+          const producerSocket = peers[p.socketId].socket;
+          if (producerSocket) {
+            producerSocket.emit("producerClosed", { producerId });
+          }
+        });
     }
 
-    // Переделать
-    socket.broadcast.emit("producerClosed", { producerId });
     notifyUsersList(currentServerId);
+  });
+
+  socket.on("kickUser", ({ targetSocketId }, callback) => {
+    const targetSocket = connections.sockets.get(targetSocketId);
+    if (targetSocket) {
+      targetSocket.emit("kickedUser");
+    }
+
+    callback({ success: true, message: "User kicked successfully." });
   });
 
   socket.on(
