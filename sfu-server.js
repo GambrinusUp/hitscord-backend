@@ -88,7 +88,7 @@ app.get("/rooms/:serverId", (req, res) => {
 const createWorker = async () => {
   worker = await mediasoup.createWorker({
     rtcMinPort: 2000,
-    rtcMaxPort: 2200, // 201 порта
+    rtcMaxPort: 2400, // 401 порт
   });
 
   console.log(`worker pid ${worker.pid}`);
@@ -153,7 +153,7 @@ connections.on("connection", async (socket) => {
     });
   };
 
-  console.log(socket.id);
+  //console.log(socket.id);
 
   //notifyUsersList();
 
@@ -204,7 +204,7 @@ connections.on("connection", async (socket) => {
   };
 
   socket.on("leaveRoom", () => {
-    console.log("peer leaving room");
+    //console.log("peer leaving room");
 
     // Удаление consumers, producers, и transports, связанных с пользователем
     consumers = removeItems(consumers, socket.id, "consumer");
@@ -228,7 +228,7 @@ connections.on("connection", async (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("peer disconnected");
+    //console.log("peer disconnected");
     consumers = removeItems(consumers, socket.id, "consumer");
     producers = removeItems(producers, socket.id, "producer");
     transports = removeItems(transports, socket.id, "transport");
@@ -260,7 +260,7 @@ connections.on("connection", async (socket) => {
   });
 
   socket.on("joinRoom", async ({ roomName, userName, serverId }, callback) => {
-    console.log("joinRoom", userName);
+    //console.log("joinRoom", userName);
     currentServerId = serverId;
     const router1 = await createRoom(roomName, socket.id, serverId);
 
@@ -338,7 +338,7 @@ connections.on("connection", async (socket) => {
       }
     }
 
-    console.log(`Router ID: ${router1.id}`, peers.length);
+    //console.log(`Router ID: ${router1.id}`, peers.length);
 
     rooms[roomName] = {
       router: router1,
@@ -431,12 +431,12 @@ connections.on("connection", async (socket) => {
   });
 
   const informConsumers = (roomName, socketId, id) => {
-    console.log(`just joined, id ${id} ${roomName}, ${socketId}`);
+    //console.log(`just joined, id ${id} ${roomName}, ${socketId}`);
 
     // Используем Set для хранения уникальных id продюсеров
     const uniqueProducers = new Set();
 
-    console.log("producers: ", producers);
+    //console.log("producers: ", producers);
 
     producers.forEach((producerData) => {
       if (
@@ -462,7 +462,7 @@ connections.on("connection", async (socket) => {
   };
 
   socket.on("transport-connect", ({ dtlsParameters }) => {
-    console.log("DTLS PARAMS... ", { dtlsParameters });
+    //console.log("DTLS PARAMS... ", { dtlsParameters });
 
     getTransport(socket.id).connect({ dtlsParameters });
   });
@@ -481,10 +481,10 @@ connections.on("connection", async (socket) => {
 
       informConsumers(roomName, socket.id, producer.id);
 
-      console.log("Producer ID: ", producer.id, producer.kind);
+      //console.log("Producer ID: ", producer.id, producer.kind);
 
       producer.on("transportclose", () => {
-        console.log("transport for this producer closed ");
+        //console.log("transport for this producer closed ");
         producer.close();
       });
 
@@ -498,7 +498,7 @@ connections.on("connection", async (socket) => {
   socket.on(
     "transport-recv-connect",
     async ({ dtlsParameters, serverConsumerTransportId }) => {
-      console.log(`DTLS PARAMS: ${dtlsParameters}`);
+      //console.log(`DTLS PARAMS: ${dtlsParameters}`);
       const consumerTransport = transports.find(
         (transportData) =>
           transportData.consumer &&
@@ -513,7 +513,7 @@ connections.on("connection", async (socket) => {
     if (producer) {
       producer.producer.close();
       producers = producers.filter((p) => p.producer.id !== producerId);
-      console.log(`Producer ${producerId} закрыт и удалён.`);
+      //console.log(`Producer ${producerId} закрыт и удалён.`);
 
       //socket.broadcast.emit("producerClosed", { producerId });
 
@@ -571,7 +571,7 @@ connections.on("connection", async (socket) => {
           });
 
           consumer.on("producerclose", () => {
-            console.log("producer of consumer closed", remoteProducerId);
+            //console.log("producer of consumer closed", remoteProducerId);
             socket.emit("producer-closed", {
               remoteProducerId: remoteProducerId,
             });
@@ -616,7 +616,7 @@ connections.on("connection", async (socket) => {
   );
 
   socket.on("consumer-resume", async ({ serverConsumerId }) => {
-    console.log("consumer resume");
+    //console.log("consumer resume");
     const { consumer } = consumers.find(
       (consumerData) => consumerData.consumer.id === serverConsumerId
     );
@@ -631,10 +631,7 @@ const createWebRtcTransport = async (router) => {
         listenIps: [
           {
             ip: "0.0.0.0",
-            announcedIp: "51.250.111.226",
-            //announcedIp: "127.0.0.1",
-            //announcedIp: "192.168.0.101",
-            //announcedIp: "10.115.190.28",
+            announcedIp: "91.203.232.124",
           },
         ],
         enableUdp: true,
@@ -646,7 +643,7 @@ const createWebRtcTransport = async (router) => {
       let transport = await router.createWebRtcTransport(
         webRtcTransport_options
       );
-      console.log(`transport id: ${transport.id}`);
+      //console.log(`transport id: ${transport.id}`);
 
       transport.on("dtlsstatechange", (dtlsState) => {
         if (dtlsState === "closed") {
