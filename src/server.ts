@@ -98,15 +98,21 @@ connections.on("connection", async (socket) => {
 
   socket.on("leaveRoom", async ({ accessToken, voiceChannelId }) => {
     try {
-      await removeVoiceChannel(voiceChannelId, accessToken);
+      try {
+        const response = await removeVoiceChannel(voiceChannelId, accessToken);
 
-      store.removeConsumer(socket.id);
-      store.removeProducer(socket.id);
-      store.removeTransport(socket.id);
+        if (response.status === 200) {
+          store.removeConsumer(socket.id);
+          store.removeProducer(socket.id);
+          store.removeTransport(socket.id);
 
-      store.removePeer(socket.id);
+          store.removePeer(socket.id);
 
-      notifyUsersList(currentServerId, connections);
+          notifyUsersList(currentServerId, connections);
+        }
+      } catch (error: any) {
+        console.log(error.status, error.data);
+      }
     } catch (error: any) {
       console.log(error.status, error.data);
     }

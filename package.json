@@ -4,7 +4,8 @@
   "description": "",
   "main": "server.ts",
   "scripts": {
-    "dev": "npx tsx src/server.ts"
+    "dev": "npx tsx src/server.ts",
+    "build": "tsc"
   },
   "author": "",
   "license": "ISC",
@@ -24,5 +25,5 @@
     "mediasoup": "^3.15.7",
     "socket.io": "^4.8.1"
   },
-  "type": "module"
+  "type": "commonjs"
 }
