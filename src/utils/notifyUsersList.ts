@@ -10,10 +10,12 @@ export const notifyUsersList = (serverId: string, connections: Namespace) => {
   const roomUsersList = server.roomNames.map((roomName) => {
     const users = store.producers
       .filter(({ roomName: producerRoomName }) => producerRoomName === roomName)
-      .map(({ socketId, userName, producer }) => ({
+      .map(({ socketId, userName, userId, producer, source }) => ({
         socketId,
         userName,
+        userId,
         producerId: producer.id,
+        source,
       }));
 
     return {

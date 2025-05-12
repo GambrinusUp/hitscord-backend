@@ -31,18 +31,18 @@ app.use(express.json());
 app.use("/sfu/:room", express.static(path.join(process.cwd(), "public")));
 app.use(routes);
 
-/*const options = {
+const options = {
   key: fs.readFileSync("src/server.key"),
   cert: fs.readFileSync("src/server.cert"),
-};*/
-
-const options = {
-  key: fs.readFileSync("privkey.pem"),
-  cert: fs.readFileSync("fullchain.pem"),
 };
 
+/*const options = {
+  key: fs.readFileSync("src/privkey.pem"),
+  cert: fs.readFileSync("src/fullchain.pem"),
+};*/
+
 const httpsServer = https.createServer(options, app);
-httpsServer.listen(443, "0.0.0.0", () => {
+httpsServer.listen(3000, "0.0.0.0", () => {
   console.log("Listening on port: 443");
 });
 
@@ -66,7 +66,7 @@ connections.on("connection", async (socket) => {
 
   let currentServerId = "";
 
-  socket.on("setServer", ({ serverId, userName }) => {
+  socket.on("setServer", ({ serverId, userName, userId }) => {
     for (const otherServerId in store.serversUser) {
       if (store.serversUser.hasOwnProperty(otherServerId)) {
         store.serversUser[otherServerId].users = store.serversUser[
@@ -89,6 +89,7 @@ connections.on("connection", async (socket) => {
       store.serversUser[serverId].users.push({
         socketId: socket.id,
         userName: userName,
+        userId,
         roomName: null,
       });
     }
@@ -134,11 +135,13 @@ connections.on("connection", async (socket) => {
       {
         roomName,
         userName,
+        userId,
         serverId,
         accessToken,
       }: {
         roomName: string;
         userName: string;
+        userId: string;
         serverId: string;
         accessToken: string;
       },
@@ -157,7 +160,7 @@ connections.on("connection", async (socket) => {
             worker
           );
 
-          store.addPeer(socket, roomName, userName);
+          store.addPeer(socket, roomName, userName, userId);
 
           if (router1) {
             const rtpCapabilities = router1.rtpCapabilities;
@@ -216,7 +219,9 @@ connections.on("connection", async (socket) => {
 
   socket.on(
     "transport-produce",
-    async ({ kind, rtpParameters, accessToken }, callback) => {
+    async ({ kind, rtpParameters, accessToken, appData }, callback) => {
+      //console.log(appData);
+
       if ((kind as MediaKind) === "video") {
         try {
           await toggleStream(accessToken);
@@ -228,11 +233,19 @@ connections.on("connection", async (socket) => {
       const producer = await store.getTransport(socket.id).produce({
         kind,
         rtpParameters,
+        appData,
       });
 
       const { roomName, peerDetails } = store.peers[socket.id];
 
-      store.addProducer(producer, roomName, peerDetails.name, socket.id);
+      store.addProducer(
+        producer,
+        roomName,
+        peerDetails.name,
+        socket.id,
+        appData?.source,
+        peerDetails.userId
+      );
 
       informConsumers(
         roomName,
@@ -337,6 +350,7 @@ connections.on("connection", async (socket) => {
             (producer) => producer.producer.id === remoteProducerId
           );
           const userName = producerData ? producerData.userName : "Unknown";
+          const source = producerData ? producerData.source : undefined;
 
           store.addConsumer(consumer, roomName, socket.id);
 
@@ -347,6 +361,7 @@ connections.on("connection", async (socket) => {
             rtpParameters: consumer.rtpParameters,
             serverConsumerId: consumer.id,
             userName,
+            source,
           };
 
           callback({ params });

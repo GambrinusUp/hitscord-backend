@@ -22,6 +22,7 @@ export interface PeerInfo {
   consumers: string[];
   peerDetails: {
     name: string;
+    userId: string;
     isAdmin: boolean;
   };
 }
@@ -38,6 +39,8 @@ export interface ProducerInfo {
   producer: Producer;
   roomName: string;
   userName: string;
+  userId?: string;
+  source?: "screen-video" | "screen-audio" | "microphone" | "camera";
 }
 
 export interface ConsumerInfo {
@@ -50,6 +53,7 @@ export interface ServerUsersInfo {
   users: {
     socketId: string;
     userName: string;
+    userId: string;
     roomName: string | null;
   }[];
 }

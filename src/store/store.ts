@@ -85,7 +85,7 @@ class InMemoryStore {
     }
   }
 
-  addPeer(socket: Socket, roomName: string, userName: string) {
+  addPeer(socket: Socket, roomName: string, userName: string, userId: string) {
     this.peers[socket.id] = {
       socket,
       roomName,
@@ -94,6 +94,7 @@ class InMemoryStore {
       consumers: [],
       peerDetails: {
         name: userName || "Anonymous",
+        userId,
         isAdmin: false,
       },
     };
@@ -155,11 +156,13 @@ class InMemoryStore {
     producer: Producer,
     roomName: string,
     name: string,
-    socketId: string
+    socketId: string,
+    source?: "screen-video" | "screen-audio" | "microphone" | "camera",
+    userId?: string
   ) => {
     this.producers = [
       ...this.producers,
-      { socketId, producer, roomName, userName: name },
+      { socketId, producer, roomName, userName: name, userId, source },
     ];
 
     this.peers[socketId] = {
@@ -168,7 +171,11 @@ class InMemoryStore {
     };
 
     const { audioLevelObserver } = this.rooms[roomName];
-    if (producer.kind === "audio" && audioLevelObserver) {
+    if (
+      producer.kind === "audio" &&
+      audioLevelObserver &&
+      source !== "screen-audio"
+    ) {
       audioLevelObserver
         .addProducer({ producerId: producer.id })
         .catch((err) => {
