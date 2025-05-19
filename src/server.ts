@@ -110,6 +110,8 @@ connections.on("connection", async (socket) => {
           store.removePeer(socket.id);
 
           notifyUsersList(currentServerId, connections);
+
+          socket.emit("leaveConfirmed");
         }
       } catch (error: any) {
         console.log(error.status, error.data);
