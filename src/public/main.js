@@ -1,6 +1,5 @@
 import { Device } from "/node_modules/mediasoup-client/lib/Device.js";
 
-// Добавьте эти переменные в нужное место в вашем коде
 let device;
 let sendTransport;
 let recvTransport;
@@ -13,7 +12,6 @@ document.getElementById("join-button").addEventListener("click", async () => {
     const socket = io();
     socket.emit("joinRoom", { username, roomId });
 
-    // Ждем параметры WebRTC транспорта от сервера
     socket.on(
       "transportCreated",
       async ({
@@ -21,21 +19,17 @@ document.getElementById("join-button").addEventListener("click", async () => {
         recvTransportOptions,
         routerRtpCapabilities,
       }) => {
-        // Установка устройства Mediasoup
         await loadDevice(routerRtpCapabilities);
 
-        // Создание транспортов для отправки и приема медиа
         sendTransport = await createSendTransport(socket, sendTransportOptions);
         recvTransport = await createRecvTransport(socket, recvTransportOptions);
 
-        // Получаем локальный медиапоток
         const localStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
           video: false,
         });
         addParticipantVideo("local", localStream);
 
-        // Отправляем медиа потоки на сервер
         for (const track of localStream.getTracks()) {
           const producer = await sendTransport.produce({ track });
           socket.emit("sendTrack", {
@@ -46,7 +40,6 @@ document.getElementById("join-button").addEventListener("click", async () => {
       }
     );
 
-    // Получение медиапотоков от других участников
     socket.on("newProducer", async ({ producerId, kind }) => {
       const consumer = await consume(socket, producerId, kind);
       const remoteStream = new MediaStream([consumer.track]);
@@ -57,7 +50,6 @@ document.getElementById("join-button").addEventListener("click", async () => {
   }
 });
 
-// Функция для загрузки устройства Mediasoup
 const loadDevice = async (routerRtpCapabilities) => {
   try {
     device = new Device();
@@ -67,17 +59,14 @@ const loadDevice = async (routerRtpCapabilities) => {
   }
 };
 
-// Создание WebRTC транспорта для отправки медиа
 const createSendTransport = async (socket, transportOptions) => {
   return device.createSendTransport(transportOptions);
 };
 
-// Создание WebRTC транспорта для приема медиа
 const createRecvTransport = async (socket, transportOptions) => {
   return device.createRecvTransport(transportOptions);
 };
 
-// Подписка на медиа-поток (создание consumer)
 const consume = async (socket, producerId, kind) => {
   return new Promise((resolve, reject) => {
     socket.emit(

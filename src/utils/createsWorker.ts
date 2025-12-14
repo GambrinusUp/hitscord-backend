@@ -1,9 +1,10 @@
 import { createWorker } from "mediasoup";
+import { RTC_MAX_PORT, RTC_MIN_PORT } from "../constants";
 
 export const createsWorker = async () => {
   const worker = await createWorker({
-    rtcMinPort: 2000,
-    rtcMaxPort: 2400, // 401 порт
+    rtcMinPort: RTC_MIN_PORT,
+    rtcMaxPort: RTC_MAX_PORT,
   });
 
   console.log(`worker pid ${worker.pid}`);

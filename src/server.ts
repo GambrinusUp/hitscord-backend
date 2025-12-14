@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import express from "express";
 import cors from "cors";
 import path from "path";
@@ -28,22 +29,17 @@ let worker: Worker<AppData>;
 
 app.use(cors());
 app.use(express.json());
-app.use("/sfu/:room", express.static(path.join(process.cwd(), "public")));
-app.use(routes);
+//app.use("/sfu/:room", express.static(path.join(process.cwd(), "public")));
+//app.use(routes);
 
 const options = {
-  key: fs.readFileSync("src/server.key"),
-  cert: fs.readFileSync("src/server.cert"),
+  key: fs.readFileSync(process.env.SSL_KEY_PATH!),
+  cert: fs.readFileSync(process.env.SSL_CERT_PATH!),
 };
 
-/*const options = {
-  key: fs.readFileSync("src/privkey.pem"),
-  cert: fs.readFileSync("src/fullchain.pem"),
-};*/
-
 const httpsServer = https.createServer(options, app);
-httpsServer.listen(3000, "0.0.0.0", () => {
-  console.log("Listening on port: 443");
+httpsServer.listen(Number(process.env.PORT), "0.0.0.0", () => {
+  console.log(`Media server listening on https://0.0.0.0:${process.env.PORT}`);
 });
 
 const io = new Server(httpsServer, {

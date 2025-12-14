@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  hitscord-media:
+    build: .
+    container_name: hitscord-media
+    ports:
+      - "3000:3000"
+      - "${RTC_MIN_PORT}-${RTC_MAX_PORT}:${RTC_MIN_PORT}-${RTC_MAX_PORT}/udp"
+    env_file:
+      - .env
+    restart: unless-stopped
