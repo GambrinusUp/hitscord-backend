@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import path from "path";
@@ -22,6 +22,7 @@ import {
   joinVoiceChannel,
   removeVoiceChannel,
   toggleStream,
+  muteUser,
 } from "./services/apiService";
 
 const app = express();
@@ -78,7 +79,7 @@ connections.on("connection", async (socket) => {
     }
 
     const isUserAlreadyOnServer = store.serversUser[serverId].users.some(
-      (user) => user.socketId === socket.id
+      (user) => user.socketId === socket.id,
     );
 
     if (!isUserAlreadyOnServer) {
@@ -143,7 +144,7 @@ connections.on("connection", async (socket) => {
         serverId: string;
         accessToken: string;
       },
-      callback
+      callback,
     ) => {
       currentServerId = serverId;
 
@@ -155,7 +156,7 @@ connections.on("connection", async (socket) => {
             roomName,
             socket.id,
             serverId,
-            worker
+            worker,
           );
 
           store.addPeer(socket, roomName, userName, userId);
@@ -176,7 +177,7 @@ connections.on("connection", async (socket) => {
           callback({ error: `Unknown error` });
         }*/
       }
-    }
+    },
   );
 
   socket.on("createWebRtcTransport", async ({ consumer }, callback) => {
@@ -200,7 +201,7 @@ connections.on("connection", async (socket) => {
         },
         (error) => {
           console.log(error);
-        }
+        },
       );
     }
   });
@@ -218,50 +219,63 @@ connections.on("connection", async (socket) => {
   socket.on(
     "transport-produce",
     async ({ kind, rtpParameters, accessToken, appData }, callback) => {
-      //console.log(appData);
+      console.log("transport-produce event received, kind:", kind);
+      try {
+        //console.log(appData);
 
-      if ((kind as MediaKind) === "video") {
-        try {
-          await toggleStream(accessToken);
-        } catch (error) {
-          console.error(error);
+        if ((kind as MediaKind) === "video") {
+          try {
+            await toggleStream(accessToken);
+          } catch (error) {
+            console.error(error);
+          }
         }
+
+        const producer = await store.getTransport(socket.id).produce({
+          kind,
+          rtpParameters,
+          appData,
+        });
+
+        const { roomName, peerDetails } = store.peers[socket.id];
+
+        store.addProducer(
+          producer,
+          roomName,
+          peerDetails.name,
+          socket.id,
+          appData?.source,
+          peerDetails.userId,
+        );
+
+        if ((kind as MediaKind) === "video") {
+          console.log("Emitting new-producer to producer socket:", socket.id);
+          socket.emit("new-producer", { producerId: producer.id });
+        }
+
+        informConsumers(
+          roomName,
+          socket.id,
+          producer.id,
+          currentServerId,
+          connections,
+        );
+
+        producer.on("transportclose", () => {
+          producer.close();
+        });
+
+        callback({
+          id: producer.id,
+          producersExist: store.producers.length > 1 ? true : false,
+        });
+      } catch (error) {
+        console.error("Error in transport-produce:", error);
+        callback({
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
       }
-
-      const producer = await store.getTransport(socket.id).produce({
-        kind,
-        rtpParameters,
-        appData,
-      });
-
-      const { roomName, peerDetails } = store.peers[socket.id];
-
-      store.addProducer(
-        producer,
-        roomName,
-        peerDetails.name,
-        socket.id,
-        appData?.source,
-        peerDetails.userId
-      );
-
-      informConsumers(
-        roomName,
-        socket.id,
-        producer.id,
-        currentServerId,
-        connections
-      );
-
-      producer.on("transportclose", () => {
-        producer.close();
-      });
-
-      callback({
-        id: producer.id,
-        producersExist: store.producers.length > 1 ? true : false,
-      });
-    }
+    },
   );
 
   socket.on(
@@ -269,14 +283,14 @@ connections.on("connection", async (socket) => {
     async ({ dtlsParameters, serverConsumerTransportId }) => {
       try {
         const consumerTransport = store.getConsumerTransport(
-          serverConsumerTransportId
+          serverConsumerTransportId,
         );
 
         await consumerTransport.connect({ dtlsParameters });
       } catch (error) {
         console.error("Error connecting consumer transport:", error);
       }
-    }
+    },
   );
 
   socket.on("stopProducer", async ({ producerId, accessToken }) => {
@@ -284,7 +298,7 @@ connections.on("connection", async (socket) => {
       await toggleStream(accessToken);
 
       const producer = store.producers.find(
-        (p) => p.producer.id === producerId
+        (p) => p.producer.id === producerId,
       );
 
       if (producer) {
@@ -308,16 +322,94 @@ connections.on("connection", async (socket) => {
     callback({ success: true, message: "User kicked successfully." });
   });
 
+  socket.on("muteUserById", async ({ userId, accessToken }, callback) => {
+    try {
+      const audioProducers = store.producers.filter(
+        (p) => p.userId === userId && p.producer.kind === "audio",
+      );
+
+      if (audioProducers.length === 0) {
+        callback({
+          success: false,
+          message: `No audio producers found for user ${userId}`,
+        });
+        return;
+      }
+
+      await Promise.all(
+        audioProducers.map((producerInfo) => producerInfo.producer.pause()),
+      );
+
+      try {
+        await muteUser(userId, accessToken);
+      } catch (error) {
+        console.error("Error calling muteUser API:", error);
+      }
+
+      callback({
+        success: true,
+        message: `User ${userId} muted successfully.`,
+        mutedProducers: audioProducers.length,
+        accessToken,
+      });
+    } catch (error) {
+      console.error("Error muting user:", error);
+      callback({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  socket.on("unmuteUserById", async ({ userId, accessToken }, callback) => {
+    try {
+      const audioProducers = store.producers.filter(
+        (p) => p.userId === userId && p.producer.kind === "audio",
+      );
+
+      if (audioProducers.length === 0) {
+        callback({
+          success: false,
+          message: `No audio producers found for user ${userId}`,
+        });
+        return;
+      }
+
+      await Promise.all(
+        audioProducers.map((producerInfo) => producerInfo.producer.resume()),
+      );
+
+      try {
+        await muteUser(userId, accessToken);
+      } catch (error) {
+        console.error("Error calling muteUser API:", error);
+      }
+
+      callback({
+        success: true,
+        message: `User ${userId} unmuted successfully.`,
+        unmutedProducers: audioProducers.length,
+        accessToken,
+      });
+    } catch (error) {
+      console.error("Error unmuting user:", error);
+      callback({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
   socket.on(
     "consume",
     async (
       { rtpCapabilities, remoteProducerId, serverConsumerTransportId },
-      callback
+      callback,
     ) => {
       try {
         const { roomName, router } = store.getRoomData(socket.id);
         const consumerTransport = store.getConsumerTransport(
-          serverConsumerTransportId
+          serverConsumerTransportId,
         );
 
         if (
@@ -345,7 +437,7 @@ connections.on("connection", async (socket) => {
           });
 
           const producerData = store.producers.find(
-            (producer) => producer.producer.id === remoteProducerId
+            (producer) => producer.producer.id === remoteProducerId,
           );
           const userName = producerData ? producerData.userName : "Unknown";
           const source = producerData ? producerData.source : undefined;
@@ -371,12 +463,12 @@ connections.on("connection", async (socket) => {
           },
         });
       }
-    }
+    },
   );
 
   socket.on("consumer-resume", async ({ serverConsumerId }) => {
     const consumerInfo = store.consumers.find(
-      (consumerData) => consumerData.consumer.id === serverConsumerId
+      (consumerData) => consumerData.consumer.id === serverConsumerId,
     );
 
     await consumerInfo?.consumer.resume();

@@ -87,3 +87,34 @@ export const toggleStream = async (
     }
   }
 };
+
+export const muteUser = async (
+  userId: string,
+  accessToken: string
+): Promise<AxiosResponse> => {
+  try {
+    const response = await axios.put(
+      `${API_URL}/channel/voice/mute/user`,
+      {
+        userId,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return response;
+  } catch (error: any) {
+    console.error(error);
+    if (error instanceof AxiosError) {
+      throw new Error(
+        `Request failed with status code ${error.response?.status}: ${error.message}`
+      );
+    } else {
+      throw new Error(`Unknown error: ${error.data.message}`);
+    }
+  }
+};
