@@ -163,8 +163,9 @@ connections.on("connection", async (socket) => {
 
           if (router1) {
             const rtpCapabilities = router1.rtpCapabilities;
+            const muteStatus = response.data?.muteStatus;
 
-            callback({ rtpCapabilities });
+            callback({ rtpCapabilities, muteStatus });
           }
         }
       } catch (error) {
