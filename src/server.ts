@@ -187,6 +187,23 @@ connections.on("connection", async (socket) => {
     const router = store.rooms[roomName].router;
 
     if (router) {
+      if (consumer) {
+        const existingConsumerTransport = store.getConsumerTransportForSocket(
+          socket.id,
+        );
+        if (existingConsumerTransport && !existingConsumerTransport.closed) {
+          callback({
+            params: {
+              id: existingConsumerTransport.id,
+              iceParameters: existingConsumerTransport.iceParameters,
+              iceCandidates: existingConsumerTransport.iceCandidates,
+              dtlsParameters: existingConsumerTransport.dtlsParameters,
+            },
+          });
+          return;
+        }
+      }
+
       createWebRtcTransport(router).then(
         (transport: WebRtcTransport<AppData>) => {
           callback({
@@ -431,10 +448,9 @@ connections.on("connection", async (socket) => {
               remoteProducerId: remoteProducerId,
             });
 
-            consumerTransport.close();
             consumer.close();
 
-            store.closeProducer(consumerTransport.id, consumer.id);
+            store.closeConsumer(consumer.id);
           });
 
           const producerData = store.producers.find(

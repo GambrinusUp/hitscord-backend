@@ -73,7 +73,7 @@ class InMemoryStore {
           router: this.rooms[roomName].router,
           audioLevelObserver: this.rooms[roomName].audioLevelObserver,
           peers: this.rooms[roomName].peers.filter(
-            (peerSocketId) => peerSocketId !== socketId
+            (peerSocketId) => peerSocketId !== socketId,
           ),
         };
 
@@ -114,7 +114,7 @@ class InMemoryStore {
     router: Router,
     socketId: string,
     audioLevelObserver: AudioLevelObserver,
-    serverId: string
+    serverId: string,
   ) {
     this.rooms[roomName] = {
       router,
@@ -139,7 +139,7 @@ class InMemoryStore {
     transport: WebRtcTransport,
     roomName: string,
     consumer: boolean,
-    socketId: string
+    socketId: string,
   ) => {
     this.transports = [
       ...this.transports,
@@ -158,7 +158,7 @@ class InMemoryStore {
     name: string,
     socketId: string,
     source?: "screen-video" | "screen-audio" | "microphone" | "camera",
-    userId?: string
+    userId?: string,
   ) => {
     this.producers = [
       ...this.producers,
@@ -212,7 +212,7 @@ class InMemoryStore {
 
   getTransport = (socketId: string) => {
     const [producerTransport] = this.transports.filter(
-      (transport) => transport.socketId === socketId && !transport.consumer
+      (transport) => transport.socketId === socketId && !transport.consumer,
     );
 
     return producerTransport.transport;
@@ -222,12 +222,12 @@ class InMemoryStore {
     const transportInfo = this.transports.find(
       (transportData) =>
         transportData.consumer &&
-        transportData.transport.id === serverConsumerTransportId
+        transportData.transport.id === serverConsumerTransportId,
     );
 
     if (!transportInfo) {
       throw new Error(
-        `Consumer transport with ID ${serverConsumerTransportId} not found`
+        `Consumer transport with ID ${serverConsumerTransportId} not found`,
       );
     }
 
@@ -236,13 +236,13 @@ class InMemoryStore {
 
   stopProducer(producerId: string) {
     const producerInfo = this.producers.find(
-      (p) => p.producer.id === producerId
+      (p) => p.producer.id === producerId,
     );
 
     if (producerInfo) {
       producerInfo.producer.close();
       this.producers = this.producers.filter(
-        (p) => p.producer.id !== producerId
+        (p) => p.producer.id !== producerId,
       );
     }
   }
@@ -267,14 +267,19 @@ class InMemoryStore {
     return { roomName, router: room.router };
   }
 
-  closeProducer(consumerTransportId: string, consumerId: string) {
-    this.transports = this.transports.filter(
-      (transportData) => transportData.transport.id !== consumerTransportId
+  closeConsumer(consumerId: string) {
+    this.consumers = this.consumers.filter(
+      (consumerData) => consumerData.consumer.id !== consumerId,
+    );
+  }
+
+  getConsumerTransportForSocket(socketId: string): WebRtcTransport | null {
+    const transportInfo = this.transports.find(
+      (transportData) =>
+        transportData.consumer && transportData.socketId === socketId,
     );
 
-    this.consumers = this.consumers.filter(
-      (consumerData) => consumerData.consumer.id !== consumerId
-    );
+    return transportInfo ? transportInfo.transport : null;
   }
 }
 
