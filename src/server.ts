@@ -9,18 +9,15 @@ import { store } from "./store/store";
 import routes from "./routes/routes";
 import { notifyUsersList } from "./utils/notifyUsersList";
 import { createRoom } from "./utils/createRoom";
-import {
-  AppData,
-  MediaKind,
-  WebRtcTransport,
-  Worker,
-} from "mediasoup/node/lib/types";
+import { AppData, MediaKind, WebRtcTransport, Worker } from "mediasoup/types";
 import { createWebRtcTransport } from "./utils/createWebRtcTransport";
 import { informConsumers } from "./utils/informConsumers";
 import { createsWorker } from "./utils/createsWorker";
 import {
   joinVoiceChannel,
+  joinVoiceChannelAsBot,
   removeVoiceChannel,
+  removeVoiceChannelAsBot,
   toggleStream,
   muteUser,
 } from "./services/apiService";
@@ -51,6 +48,7 @@ const io = new Server(httpsServer, {
 });
 
 const connections = io.of("/mediasoup");
+const botVoiceSessions = new Map<string, string>();
 
 (async () => {
   worker = await createsWorker();
@@ -62,6 +60,7 @@ connections.on("connection", async (socket) => {
   });
 
   let currentServerId = "";
+  let currentBotSessionKey: string | null = null;
 
   socket.on("setServer", ({ serverId, userName, userId }) => {
     for (const otherServerId in store.serversUser) {
@@ -94,10 +93,21 @@ connections.on("connection", async (socket) => {
     notifyUsersList(serverId, connections);
   });
 
-  socket.on("leaveRoom", async ({ accessToken, voiceChannelId }) => {
+  socket.on("leaveRoom", async ({ accessToken, botApiKey, voiceChannelId }) => {
     try {
       try {
-        const response = await removeVoiceChannel(voiceChannelId, accessToken);
+        let response;
+
+        if (botApiKey) {
+          response = await removeVoiceChannelAsBot(voiceChannelId, botApiKey);
+        } else if (accessToken) {
+          response = await removeVoiceChannel(voiceChannelId, accessToken);
+        } else {
+          socket.emit("leaveError", {
+            error: "Either accessToken or botApiKey is required",
+          });
+          return;
+        }
 
         if (response.status === 200) {
           store.removeConsumer(socket.id);
@@ -106,15 +116,29 @@ connections.on("connection", async (socket) => {
 
           store.removePeer(socket.id);
 
+          if (
+            currentBotSessionKey &&
+            botVoiceSessions.get(currentBotSessionKey) === socket.id
+          ) {
+            botVoiceSessions.delete(currentBotSessionKey);
+            currentBotSessionKey = null;
+          }
+
           notifyUsersList(currentServerId, connections);
 
           socket.emit("leaveConfirmed");
         }
       } catch (error: any) {
-        console.log(error.status, error.data);
+        console.error(
+          "leaveRoom API error:",
+          error instanceof Error ? error.message : error,
+        );
       }
     } catch (error: any) {
-      console.log(error.status, error.data);
+      console.error(
+        "leaveRoom handler error:",
+        error instanceof Error ? error.message : error,
+      );
     }
   });
 
@@ -124,6 +148,14 @@ connections.on("connection", async (socket) => {
     store.removeTransport(socket.id);
 
     store.removePeer(socket.id);
+
+    if (
+      currentBotSessionKey &&
+      botVoiceSessions.get(currentBotSessionKey) === socket.id
+    ) {
+      botVoiceSessions.delete(currentBotSessionKey);
+      currentBotSessionKey = null;
+    }
 
     notifyUsersList(currentServerId, connections);
   });
@@ -137,21 +169,67 @@ connections.on("connection", async (socket) => {
         userId,
         serverId,
         accessToken,
+        botApiKey,
       }: {
         roomName: string;
         userName: string;
         userId: string;
         serverId: string;
-        accessToken: string;
+        accessToken?: string;
+        botApiKey?: string;
       },
       callback,
     ) => {
       currentServerId = serverId;
 
       try {
-        const response = await joinVoiceChannel(roomName, accessToken);
+        let response;
+
+        if (botApiKey) {
+          response = await joinVoiceChannelAsBot(roomName, botApiKey);
+        } else if (accessToken) {
+          response = await joinVoiceChannel(roomName, accessToken);
+        } else {
+          callback({ error: "Either accessToken or botApiKey is required" });
+          return;
+        }
 
         if (response.status === 200) {
+          if (botApiKey) {
+            const botSessionKey = `${serverId}:${userId}`;
+
+            if (
+              currentBotSessionKey &&
+              currentBotSessionKey !== botSessionKey &&
+              botVoiceSessions.get(currentBotSessionKey) === socket.id
+            ) {
+              botVoiceSessions.delete(currentBotSessionKey);
+            }
+
+            const existingSocketId = botVoiceSessions.get(botSessionKey);
+            if (existingSocketId && existingSocketId !== socket.id) {
+              const existingSocket = connections.sockets.get(existingSocketId);
+              if (existingSocket) {
+                existingSocket.emit("kickedByNewBotSession", {
+                  serverId,
+                  userId,
+                });
+                existingSocket.disconnect(true);
+              } else {
+                botVoiceSessions.delete(botSessionKey);
+              }
+            }
+
+            botVoiceSessions.set(botSessionKey, socket.id);
+            currentBotSessionKey = botSessionKey;
+          } else if (
+            currentBotSessionKey &&
+            botVoiceSessions.get(currentBotSessionKey) === socket.id
+          ) {
+            botVoiceSessions.delete(currentBotSessionKey);
+            currentBotSessionKey = null;
+          }
+
           const router1 = await createRoom(
             roomName,
             socket.id,
@@ -169,7 +247,9 @@ connections.on("connection", async (socket) => {
           }
         }
       } catch (error) {
-        callback({ error });
+        callback({
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
         /*if (axios.isAxiosError(error)) {
           callback({
             error: `Request failed with status code ${error.response?.status}: ${error.message}`,
@@ -224,10 +304,23 @@ connections.on("connection", async (socket) => {
     }
   });
 
-  socket.on("getProducers", (callback) => {
+  socket.on("getProducers", (arg1, arg2) => {
     const producerList = store.getProducers(socket.id);
 
-    callback(producerList);
+    const callback =
+      typeof arg2 === "function"
+        ? arg2
+        : typeof arg1 === "function"
+          ? arg1
+          : null;
+
+    if (callback) {
+      callback(producerList);
+      return;
+    }
+
+    // Fallback for clients that call without ack callback.
+    socket.emit("producers-list", producerList);
   });
 
   socket.on("transport-connect", ({ dtlsParameters }) => {

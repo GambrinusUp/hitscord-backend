@@ -3,7 +3,7 @@ import { API_URL } from "../constants";
 
 export const joinVoiceChannel = async (
   voiceChannelId: string,
-  accessToken: string
+  accessToken: string,
 ): Promise<AxiosResponse> => {
   try {
     const response = await axios.post(
@@ -16,7 +16,7 @@ export const joinVoiceChannel = async (
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     return response;
@@ -24,7 +24,38 @@ export const joinVoiceChannel = async (
     console.error(error);
     if (error instanceof AxiosError) {
       throw new Error(
-        `Request failed with status code ${error.response?.status}: ${error.message}`
+        `Request failed with status code ${error.response?.status}: ${error.message}`,
+      );
+    } else {
+      throw new Error(`Unknown error: ${error.data.message}`);
+    }
+  }
+};
+
+export const joinVoiceChannelAsBot = async (
+  voiceChannelId: string,
+  botApiKey: string,
+): Promise<AxiosResponse> => {
+  try {
+    const response = await axios.post(
+      `${API_URL}/channel/voice/join/bot`,
+      {
+        voiceChannelId,
+      },
+      {
+        headers: {
+          "X-Bot-Api-Key": botApiKey,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    return response;
+  } catch (error: any) {
+    console.error(error);
+    if (error instanceof AxiosError) {
+      throw new Error(
+        `Request failed with status code ${error.response?.status}: ${error.message}`,
       );
     } else {
       throw new Error(`Unknown error: ${error.data.message}`);
@@ -34,7 +65,7 @@ export const joinVoiceChannel = async (
 
 export const removeVoiceChannel = async (
   voiceChannelId: string,
-  accessToken: string
+  accessToken: string,
 ): Promise<AxiosResponse> => {
   try {
     const response = await axios.delete(`${API_URL}/channel/voice/remove`, {
@@ -52,7 +83,35 @@ export const removeVoiceChannel = async (
     console.error(error);
     if (error instanceof AxiosError) {
       throw new Error(
-        `Request failed with status code ${error.response?.status}: ${error.message}`
+        `Request failed with status code ${error.response?.status}: ${error.message}`,
+      );
+    } else {
+      throw new Error(`Unknown error: ${error.data.message}`);
+    }
+  }
+};
+
+export const removeVoiceChannelAsBot = async (
+  voiceChannelId: string,
+  botApiKey: string,
+): Promise<AxiosResponse> => {
+  try {
+    const response = await axios.delete(`${API_URL}/channel/voice/remove/bot`, {
+      headers: {
+        "X-Bot-Api-Key": botApiKey,
+        "Content-Type": "application/json",
+      },
+      data: {
+        voiceChannelId,
+      },
+    });
+
+    return response;
+  } catch (error: any) {
+    console.error(error);
+    if (error instanceof AxiosError) {
+      throw new Error(
+        `Request failed with status code ${error.response?.status}: ${error.message}`,
       );
     } else {
       throw new Error(`Unknown error: ${error.data.message}`);
@@ -61,7 +120,7 @@ export const removeVoiceChannel = async (
 };
 
 export const toggleStream = async (
-  accessToken: string
+  accessToken: string,
 ): Promise<AxiosResponse> => {
   try {
     const response = await axios.put(
@@ -72,7 +131,7 @@ export const toggleStream = async (
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     return response;
@@ -80,7 +139,7 @@ export const toggleStream = async (
     console.error(error);
     if (error instanceof AxiosError) {
       throw new Error(
-        `Request failed with status code ${error.response?.status}: ${error.message}`
+        `Request failed with status code ${error.response?.status}: ${error.message}`,
       );
     } else {
       throw new Error(`Unknown error: ${error.data.message}`);
@@ -90,7 +149,7 @@ export const toggleStream = async (
 
 export const muteUser = async (
   userId: string,
-  accessToken: string
+  accessToken: string,
 ): Promise<AxiosResponse> => {
   try {
     const response = await axios.put(
@@ -103,7 +162,7 @@ export const muteUser = async (
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     return response;
@@ -111,7 +170,7 @@ export const muteUser = async (
     console.error(error);
     if (error instanceof AxiosError) {
       throw new Error(
-        `Request failed with status code ${error.response?.status}: ${error.message}`
+        `Request failed with status code ${error.response?.status}: ${error.message}`,
       );
     } else {
       throw new Error(`Unknown error: ${error.data.message}`);

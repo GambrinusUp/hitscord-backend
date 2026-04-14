@@ -8,9 +8,9 @@ import {
   ServerUsersInfo,
   ServerInfo,
 } from "./store.types";
-import { Router } from "mediasoup/node/lib/RouterTypes";
-import { AudioLevelObserver } from "mediasoup/node/lib/AudioLevelObserverTypes";
-import { Consumer, Producer, WebRtcTransport } from "mediasoup/node/lib/types";
+import { Router } from "mediasoup/types";
+import { AudioLevelObserver } from "mediasoup/types";
+import { Consumer, Producer, WebRtcTransport } from "mediasoup/types";
 
 class InMemoryStore {
   rooms: Record<string, RoomData> = {};
@@ -178,7 +178,7 @@ class InMemoryStore {
     ) {
       audioLevelObserver
         .addProducer({ producerId: producer.id })
-        .catch((err) => {
+        .catch((err: any) => {
           console.error("Failed to add producer to audioLevelObserver:", err);
         });
     }
