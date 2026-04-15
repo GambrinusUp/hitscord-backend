@@ -238,6 +238,7 @@ connections.on("connection", async (socket) => {
           );
 
           store.addPeer(socket, roomName, userName, userId);
+          notifyUsersList(currentServerId, connections);
 
           if (router1) {
             const rtpCapabilities = router1.rtpCapabilities;
@@ -550,6 +551,7 @@ connections.on("connection", async (socket) => {
             (producer) => producer.producer.id === remoteProducerId,
           );
           const userName = producerData ? producerData.userName : "Unknown";
+          const userId = producerData ? producerData.userId : undefined;
           const source = producerData ? producerData.source : undefined;
 
           store.addConsumer(consumer, roomName, socket.id);
@@ -561,6 +563,7 @@ connections.on("connection", async (socket) => {
             rtpParameters: consumer.rtpParameters,
             serverConsumerId: consumer.id,
             userName,
+            userId,
             source,
           };
 

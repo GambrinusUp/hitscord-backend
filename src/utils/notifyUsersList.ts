@@ -8,7 +8,11 @@ export const notifyUsersList = (serverId: string, connections: Namespace) => {
   if (!server || !serverUsers) return;
 
   const roomUsersList = server.roomNames.map((roomName) => {
-    const users = store.producers
+    const room = store.rooms[roomName];
+    const peerSocketIds = room?.peers || [];
+
+    // Keep producer-centric shape so existing stream UI logic continues to work.
+    const producerUsers = store.producers
       .filter(({ roomName: producerRoomName }) => producerRoomName === roomName)
       .map(({ socketId, userName, userId, producer, source }) => ({
         socketId,
@@ -17,6 +21,27 @@ export const notifyUsersList = (serverId: string, connections: Namespace) => {
         producerId: producer.id,
         source,
       }));
+
+    const socketsWithProducer = new Set(producerUsers.map((u) => u.socketId));
+
+    // Append peers without producers (e.g. consumer-only bots) for presence.
+    const peersWithoutProducers = peerSocketIds
+      .filter((peerSocketId) => !socketsWithProducer.has(peerSocketId))
+      .map((peerSocketId) => {
+        const peer = store.peers[peerSocketId];
+        if (!peer) return null;
+
+        return {
+          socketId: peerSocketId,
+          userName: peer.peerDetails.name,
+          userId: peer.peerDetails.userId,
+          producerId: undefined,
+          source: undefined,
+        };
+      })
+      .filter((user): user is NonNullable<typeof user> => user !== null);
+
+    const users = [...producerUsers, ...peersWithoutProducers];
 
     return {
       roomName,
